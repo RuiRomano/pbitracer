@@ -210,7 +210,7 @@ namespace PBITracer
 
                 serializer.Serialize(jsonWriter, jsonObj);
 
-                receivedTrace = true;
+                receivedTrace = true;                
             }
             catch (Exception ex)
             {
