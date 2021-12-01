@@ -15,6 +15,12 @@ Example:
 ```Shell
 PBITracer.exe -s "powerbi://api.powerbi.com/v1.0/myorg/WorkspaceToTrace" -d "Dataset1" --events ProgressReportEnd JobGraph
 ```
+## Output
+
+All the traces are saved as JSON files in the output path (configurable using the -ouput parameter):
+
+![image](https://user-images.githubusercontent.com/10808715/144311219-e369348e-0a71-48a2-8dfa-7b64a2f0e071.png)
+
 
 ## Authentication
 
