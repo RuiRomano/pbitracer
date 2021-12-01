@@ -40,6 +40,11 @@ Ensure the service principal is authorized on the following [Power BI Tenant Set
 - Allow service principals to user Power BI APIs
 - Allow XMLA endpoints and Analyze in Excel with on-premises datasets
 
+## Parameters
+
+![image](https://user-images.githubusercontent.com/10808715/144312012-02d8700a-e6d9-4c83-9899-d44571bd7ca7.png)
+
+
 # Sample Power BI Templates
 
 ## PBI Dataset Refresh Analysis
