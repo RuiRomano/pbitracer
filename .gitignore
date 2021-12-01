@@ -348,3 +348,12 @@ MigrationBackup/
 
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
+
+*.pbix
+/src/PBITracer/Properties/launchSettings.json
+
+/dist/PBITracer.pdb
+
+/dist/Run-*
+
+/dist/output

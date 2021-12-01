@@ -1,0 +1,1 @@
+PBITracer.exe -s "XMLA Endpoint" -d "DatasetName" -u "Username" -p "Password" --events ProgressReportEnd JobGraph QUeryEnd
