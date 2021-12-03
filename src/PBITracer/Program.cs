@@ -6,12 +6,13 @@ using Newtonsoft.Json;
 using System.IO;
 using CommandLine;
 using Newtonsoft.Json.Linq;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.InteropServices;
 using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
+using Serilog;
+using Microsoft.Extensions.Configuration;
+using System.Text;
 
 namespace PBITracer
 {
@@ -34,6 +35,9 @@ namespace PBITracer
             [Option('p', "password", Required = false, HelpText = "Password / Service Principal Secret")]
             public string password { get; set; }
 
+            [Option('l', "logging", Required = false, Default = false, HelpText = "Logging to rolling files")]
+            public bool Logging { get; set; }
+
             [Option('e', "events", Required = false, Default = new string[] { "JobGraph", "ProgressReportEnd", "QueryEnd" }, HelpText = "Events to trace, ex: QueryEnd, ProgressReportEnd")]
             public IList<string> events { get; set; }
         }
@@ -46,11 +50,12 @@ namespace PBITracer
         private static string traceId;
         private static ILogger logger;
         private static bool receivedTrace = false;
-        private static bool cleanedResources = false;
+        private static bool disposedResources = false;
         private static string outputFilePath;
         private static Microsoft.AnalysisServices.Tabular.Server conn;
 
         private static readonly CancellationTokenSource canToken = new CancellationTokenSource();
+        private static readonly string tracerIdPrefix = "PBI_Tracer";
 
         static async Task Main(string[] args)
         {
@@ -60,19 +65,49 @@ namespace PBITracer
 
                 Console.CancelKeyPress += new ConsoleCancelEventHandler(OnCancel);
 
-                var serviceProvider = Bootstrap.ConfigureServices();
+                var appPath = Directory.GetCurrentDirectory();
 
-                logger = serviceProvider.GetService<ILogger<Program>>();
+                var appSettingsFile = Path.Combine(appPath, "appsettings.json");
 
-                await Parser.Default.ParseArguments<Options>(args)
-                      .WithParsedAsync(Worker);
+                var configuration = new ConfigurationBuilder()
+                 .SetBasePath(appPath)
+                 .AddJsonFile(appSettingsFile, optional: true, reloadOnChange: true)
+                 .Build();
+
+                var loggerConfig = new LoggerConfiguration()
+                    .MinimumLevel.Debug()
+                    .WriteTo.Console();
+
+                var cmdLineParser = Parser.Default.ParseArguments<Options>(args);
+
+                if (cmdLineParser.Tag == ParserResultType.Parsed)
+                {
+                    cmdLineParser.WithParsed(o =>
+                    {
+                        if (o.Logging)
+                        {
+                            loggerConfig = loggerConfig.WriteTo.File("logs\\log_.txt"
+                                , rollingInterval: RollingInterval.Day
+                                );
+                        }
+
+                        logger = loggerConfig.CreateLogger();
+                    });
+
+                    await Parser.Default.ParseArguments<Options>(args)
+                        .WithParsedAsync(Worker);
+                }
+                else
+                {
+                    logger = loggerConfig.CreateLogger();
+                }
 
             }
             catch (Exception ex)
             {
                 if (logger != null)
                 {
-                    logger.LogError(ex, ex.Message);
+                    logger.Error(ex, ex.Message);
                 }
                 else
                 {
@@ -85,9 +120,9 @@ namespace PBITracer
 
         async static Task Worker(Options o)
         {
-            traceId = $"PBI_Tracer_{o.Database}";
+            traceId = $"{tracerIdPrefix}_{o.Database}";
 
-            logger.LogInformation("PBI Tracer on Server '{0}' | TraceId: '{1}'", o.Server, traceId);
+            logger.Information("PBI Tracer on Server '{0}' | TraceId: '{1}'", o.Server, traceId);
 
             serializer = new Newtonsoft.Json.JsonSerializer();
 
@@ -104,7 +139,7 @@ namespace PBITracer
 
             outputFilePath = Path.Combine(outputPath, fileName);
 
-            logger.LogInformation("Preparing output file: '{0}'", outputFilePath);
+            logger.Information("Preparing output file: '{0}'", outputFilePath);
 
             if (!Directory.Exists(outputPath))
             {
@@ -140,11 +175,27 @@ namespace PBITracer
 
                 conn = new Microsoft.AnalysisServices.Tabular.Server();
 
-                logger.LogInformation("Connecting to server {0}", o.Server);
+                logger.Information("Connecting to server {0}", o.Server);
 
                 conn.Connect(connStr);
 
-                logger.LogInformation("Preparing the trace configuration");
+                var previousTraces = conn.Traces.Cast<Trace>().Where(t => t.Name == traceId).ToList();
+
+                if (previousTraces.Count != 0)
+                {
+                    logger.Information("Cleaning previous traces");
+
+                    foreach (var trace in previousTraces)
+                    {
+                        if (trace.IsStarted)
+                        {
+                            trace.Stop();
+                        }
+                        trace.Drop();
+                    }
+                }
+
+                logger.Information("Preparing the trace configuration");
 
                 trace = conn.Traces.Add(traceId);
 
@@ -164,11 +215,11 @@ namespace PBITracer
 
                 trace.OnEvent += Trace_OnEvent;
 
-                logger.LogInformation("Starting the trace");
+                logger.Information("Starting the trace");
 
                 trace.Start();
 
-                logger.LogInformation("Waiting for trace data, CTRL + C to close");
+                logger.Information("Waiting for trace data, CTRL + C to close");
 
                 while (!canToken.IsCancellationRequested)
                 {
@@ -177,7 +228,7 @@ namespace PBITracer
             }
             finally
             {
-                CleanResources();
+                DisposeResources();
             }
 
         }
@@ -190,15 +241,38 @@ namespace PBITracer
 
         private static void CurrentDomain_ProcessExit(object sender, EventArgs e)
         {
-            CleanResources();
+            DisposeResources();
         }
 
         private static void Trace_OnEvent(object sender, Microsoft.AnalysisServices.Tabular.TraceEventArgs e)
         {
             try
             {
-                logger.LogDebug("TraceEvent: {0} - {1} - {2}", e.EventClass.ToString(), e.EventSubclass.ToString(), e[TraceColumn.ActivityID]);                
+                var activityId = e[TraceColumn.ActivityID];
+                                
+                switch (e.EventClass)
+                {
+                    case TraceEventClass.QueryEnd:
+                    case TraceEventClass.QueryBegin:
+                        {
+                            string truncatedText = "";
 
+                            if (!string.IsNullOrEmpty(e.TextData))
+                            {
+                                truncatedText = e.TextData.Substring(0, Math.Min(e.TextData.Length, 500));                                
+                            }
+                            
+                            logger.Debug("TraceEvent: {0} | {1} | {2} | {3} | {4}", e.EventClass.ToString(), e.EventSubclass.ToString(), activityId, e.NTUserName, truncatedText);
+                        }
+                        break;
+                    default:
+                        {
+                            logger.Debug("TraceEvent: {0} | {1} | {2}", e.EventClass.ToString(), e.EventSubclass.ToString(), activityId);
+                        }
+                        break;
+                }
+
+               
                 var eventClassColumns = listEventClassColumnCombination[e.EventClass];
 
                 var jsonObj = new JObject();
@@ -210,17 +284,19 @@ namespace PBITracer
 
                 serializer.Serialize(jsonWriter, jsonObj);
 
-                receivedTrace = true;                
+                receivedTrace = true;
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error on 'Trace_OnEvent'");
+                logger.Error(ex, "Error on 'Trace_OnEvent'");
             }
         }
 
         private static void AddTraceEvent(Microsoft.AnalysisServices.Tabular.Trace trace, TraceEventClass eventClass)
         {
-            logger.LogInformation("Tracing event: {0}", eventClass.ToString());
+            // https://docs.microsoft.com/en-us/analysis-services/trace-events/query-processing-events-data-columns?view=asallproducts-allversions
+
+            logger.Information("Tracing event: {0}", eventClass.ToString());
 
             var traceEvent = new Microsoft.AnalysisServices.Tabular.TraceEvent(eventClass);
 
@@ -241,8 +317,14 @@ namespace PBITracer
 
             if (eventClass != TraceEventClass.DirectQueryEnd && eventClass != TraceEventClass.Error)
             {
-                // DirectQuery doesn't have subclasses                
                 AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.EventSubclass);
+            }
+
+            if (eventClass == TraceEventClass.QueryEnd
+                || eventClass == TraceEventClass.CommandEnd
+                || eventClass == TraceEventClass.DAXQueryPlan)
+            {
+                AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.ApplicationName);
             }
 
             switch (eventClass)
@@ -259,14 +341,20 @@ namespace PBITracer
                 case TraceEventClass.QuerySubcube:
                 case TraceEventClass.QuerySubcubeVerbose:
                 case TraceEventClass.VertiPaqSEQueryEnd:
-                    AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.Duration);
-                    AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.CpuTime);
-                    AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.StartTime);
-                    AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.EndTime);
-                    AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.ObjectName);
-                    AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.ObjectID);
-                    AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.ObjectPath);
-                    AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.ObjectType);
+                    {
+                        AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.Duration);
+                        AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.CpuTime);
+                        AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.StartTime);
+                        AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.EndTime);
+
+                        if (eventClass != TraceEventClass.QueryEnd)
+                        {
+                            AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.ObjectType);
+                            AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.ObjectName);
+                            AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.ObjectID);
+                            AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.ObjectPath);
+                        }
+                    }
                     break;
                 case TraceEventClass.Error:
                     AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.Error);
@@ -294,11 +382,34 @@ namespace PBITracer
             }
         }
 
-        private static void CleanResources()
+        private static void DisposeResources()
         {
-            if (!cleanedResources)
+            if (!disposedResources)
             {
-                logger.LogInformation("Cleaning resources...");
+                logger.Information("Disposing resources...");
+
+                try
+                {
+                    if (trace != null)
+                    {
+                        if (trace.IsStarted)
+                        {
+                            trace.Stop();
+                        }
+
+                        trace.Drop();
+                        trace.Dispose();
+                    }
+
+                    if (conn != null)
+                    {
+                        conn.Dispose();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.Error(ex, "Error closing trace");
+                }
 
                 try
                 {
@@ -320,30 +431,13 @@ namespace PBITracer
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Error closing file");
+                    logger.Error(ex, "Error closing file");
                 }
 
-                try
-                {
-                    if (trace != null)
-                    {
-                        trace.Stop();
-                        trace.Drop();
-                        trace.Dispose();
-                    }
-
-                    if (conn != null)
-                    {
-                        conn.Dispose();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Error closing trace");
-                }
-
-                cleanedResources = true;
+                disposedResources = true;
             }
+
+            Log.CloseAndFlush();
         }
     }
 }
