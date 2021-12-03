@@ -3,7 +3,7 @@
 
 [PBITracer.exe](./dist/PBITracer.exe) is a cmdline tool for a quick trace of Power BI Datasets using the XMLA Endpoint.
 
-![Screenshot 2021-12-01 192641](https://user-images.githubusercontent.com/10808715/144308564-f4a074fd-353c-465c-9e98-82a5aeceeae1.png)
+![image](https://user-images.githubusercontent.com/10808715/144629287-327e4749-4b52-4316-9033-e332a14c950b.png)
 
 # How to start a trace?
 
@@ -42,8 +42,7 @@ Ensure the service principal is authorized on the following [Power BI Tenant Set
 
 ## Parameters
 
-![image](https://user-images.githubusercontent.com/10808715/144312012-02d8700a-e6d9-4c83-9899-d44571bd7ca7.png)
-
+![image](https://user-images.githubusercontent.com/10808715/144629408-70008fb8-3c02-48b5-9152-adf68487737d.png)
 
 # Sample Power BI Templates
 
