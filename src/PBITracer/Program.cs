@@ -222,8 +222,8 @@ namespace PBITracer
                 logger.Information("Waiting for trace data, CTRL + C to close");
 
                 while (!canToken.IsCancellationRequested)
-                {
-                    await Task.Delay(5000);
+                {                   
+                    await Task.Delay(3000);
                 }
             }
             finally
@@ -384,6 +384,11 @@ namespace PBITracer
 
         private static void DisposeResources()
         {
+            if (!canToken.IsCancellationRequested)
+            {
+                canToken.Cancel();
+            }
+
             if (!disposedResources)
             {
                 logger.Information("Disposing resources...");
