@@ -13,7 +13,7 @@ PBITracer.exe -s "XMLA Endpoint" -d "Dataset Name" -u "Username or Service Princ
 Example:
 
 ```Shell
-PBITracer.exe -s "powerbi://api.powerbi.com/v1.0/myorg/WorkspaceToTrace" -d "Dataset1" --events ProgressReportEnd JobGraph
+PBITracer.exe -s "powerbi://api.powerbi.com/v1.0/myorg/WorkspaceToTrace" -d "Dataset1" --events ProgressReportEnd JobGraph Error ProgressReportError
 ```
 ## Output
 

@@ -35,7 +35,7 @@ namespace PBITracer
             [Option('p', "password", Required = false, HelpText = "Password / Service Principal Secret")]
             public string password { get; set; }
 
-            [Option('l', "logging", Required = false, Default = false, HelpText = "Logging to rolling files")]
+            [Option('l', "logging", Required = false, Default = true, HelpText = "Logging to rolling files")]
             public bool Logging { get; set; }
 
             [Option('e', "events", Required = false, Default = new string[] { "JobGraph", "ProgressReportEnd", "QueryEnd" }, HelpText = "Events to trace, ex: QueryEnd, ProgressReportEnd")]
@@ -51,6 +51,7 @@ namespace PBITracer
         private static ILogger logger;
         private static bool receivedTrace = false;
         private static bool disposedResources = false;
+        private static object disposedResourcesLocker = new object();
         private static string outputFilePath;
         private static Microsoft.AnalysisServices.Tabular.Server conn;
 
@@ -308,7 +309,11 @@ namespace PBITracer
             AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.ActivityID);
             AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.RequestID);
             AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.DatabaseName);
-            AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.IntegerData);
+
+            if (eventClass != TraceEventClass.Error)
+            {
+                AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.IntegerData);
+            }
 
             if (eventClass == TraceEventClass.QueryEnd)
             {
@@ -384,65 +389,70 @@ namespace PBITracer
 
         private static void DisposeResources()
         {
-            if (!canToken.IsCancellationRequested)
+            lock (disposedResourcesLocker)
             {
-                canToken.Cancel();
-            }
-
-            if (!disposedResources)
-            {
-                logger.Information("Disposing resources...");
-
-                try
+                if (!canToken.IsCancellationRequested)
                 {
-                    if (trace != null)
+                    canToken.Cancel();
+                }
+
+                if (!disposedResources)
+                {
+                    logger.Information("Disposing resources...");
+
+                    try
                     {
-                        if (trace.IsStarted)
+                        if (trace != null)
                         {
-                            trace.Stop();
+                            if (trace.IsStarted)
+                            {
+                                trace.Stop();
+                            }
+
+                            trace.Drop();
+                            trace.Dispose();
                         }
 
-                        trace.Drop();
-                        trace.Dispose();
+                        if (conn != null)
+                        {
+                            conn.Dispose();
+                        }
                     }
-
-                    if (conn != null)
+                    catch (Exception ex)
                     {
-                        conn.Dispose();
+                        logger.Error(ex, "Error closing trace");
                     }
-                }
-                catch (Exception ex)
-                {
-                    logger.Error(ex, "Error closing trace");
-                }
 
-                try
-                {
-                    if (jsonWriter != null)
+                    try
                     {
-                        jsonWriter.Close();
-                    }
+                        if (jsonWriter != null)
+                        {
+                            jsonWriter.Close();
+                        }
 
-                    if (jsonFile != null)
+                        if (jsonFile != null)
+                        {
+                            jsonFile.Close();
+                            jsonFile.Dispose();
+                        }
+
+                        if (!receivedTrace && File.Exists(outputFilePath))
+                        {
+                            File.Delete(outputFilePath);
+                        }
+                    }
+                    catch (Exception ex)
                     {
-                        jsonFile.Close();
-                        jsonFile.Dispose();
+                        logger.Error(ex, "Error closing file");
                     }
 
-                    if (!receivedTrace && File.Exists(outputFilePath))
-                    {
-                        File.Delete(outputFilePath);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.Error(ex, "Error closing file");
+                    disposedResources = true;
                 }
 
-                disposedResources = true;
+                Log.CloseAndFlush();
+
+                logger.Information("Disposed all resources successfully.");
             }
-
-            Log.CloseAndFlush();
         }
     }
 }
