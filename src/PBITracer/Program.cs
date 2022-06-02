@@ -20,7 +20,7 @@ namespace PBITracer
     {
         public class Options
         {
-            [Option('s', "server", Required = true, HelpText = "Power BI Premium XMLA Address")]
+            [Option('s', "server", Required = true, HelpText = "Power BI Premium XMLA Workspace Connection")]
             public string Server { get; set; }
 
             [Option('d', "database", Required = true, HelpText = "Power BI Dataset name")]
@@ -99,8 +99,9 @@ namespace PBITracer
                         .WithParsedAsync(Worker);
                 }
                 else
-                {
+                {                                      
                     logger = loggerConfig.CreateLogger();
+
                 }
 
             }
@@ -284,7 +285,7 @@ namespace PBITracer
                 }
 
                 serializer.Serialize(jsonWriter, jsonObj);
-
+                
                 receivedTrace = true;
             }
             catch (Exception ex)
@@ -426,7 +427,7 @@ namespace PBITracer
                     try
                     {
                         if (jsonWriter != null)
-                        {
+                        {                            
                             jsonWriter.Close();
                         }
 
@@ -447,11 +448,11 @@ namespace PBITracer
                     }
 
                     disposedResources = true;
-                }
 
-                Log.CloseAndFlush();
+                    logger.Information("Disposed all resources successfully.");
 
-                logger.Information("Disposed all resources successfully.");
+                    Log.CloseAndFlush();
+                }                            
             }
         }
     }
