@@ -52,7 +52,8 @@ This template is an adaptation from [Phil Seamark PBIX](https://dax.tips/2021/02
 
 Download the [PBI Dataset Refresh Analysis.pbit](./pbit/PBI%20Dataset%20Refresh%20Analysis.pbit) template and setup the location parameter to the output folder of PBITracer.exe and you should be able to analyze your dataset refresh operations:
 
-![image](https://user-images.githubusercontent.com/10808715/144308386-21e2be4b-6858-4913-996b-eccb4651d755.png)
+![image](./images/Report1.png)
+![image](./images/Report2.png)
 
 
 
