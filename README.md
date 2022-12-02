@@ -8,13 +8,22 @@
 # How to start a trace?
 
 ```Shell
-PBITracer.exe -s "XMLA Endpoint" -d "Dataset Name" -u "Username or Service Principal Id (app:id@tenantid)" -p "Password or Service Principal Secret" --events EventList
+PBITracer.exe -s "XMLA Endpoint" -d "Dataset Name" -u "Username or Service Principal Id (app:id@tenantid)" -p "Password or Service Principal Secret" --events [Events to trace]
 ```
-Example:
+
+Example of trace to monitor queries:
 
 ```Shell
-PBITracer.exe -s "powerbi://api.powerbi.com/v1.0/myorg/WorkspaceToTrace" -d "Dataset1" --events ProgressReportEnd JobGraph Error ProgressReportError
+PBITracer.exe -s "powerbi://api.powerbi.com/v1.0/myorg/WorkspaceToTrace" -d "Dataset1" --events QueryEnd
 ```
+
+Example of trace to profile a Dataset Refresh
+
+```Shell
+PBITracer.exe -s "powerbi://api.powerbi.com/v1.0/myorg/WorkspaceToTrace" -d "Dataset1" --events ProgressReportEnd JobGraph Error ProgressReportError ProgressReportCurrent
+```
+
+
 ## Output
 
 All the traces are saved as JSON files in the output path (configurable using the -ouput parameter):
