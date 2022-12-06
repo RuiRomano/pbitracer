@@ -181,7 +181,7 @@ namespace PBITracer
 
                 conn.Connect(connStr);
 
-                var previousTraces = conn.Traces.Cast<Trace>().Where(t => t.Name == traceId).ToList();
+                var previousTraces = conn.Traces.Cast<Microsoft.AnalysisServices.Tabular.Trace>().Where(t => t.Name == traceId).ToList();
 
                 if (previousTraces.Count != 0)
                 {
@@ -200,7 +200,7 @@ namespace PBITracer
                 logger.Information("Preparing the trace configuration");
 
                 trace = conn.Traces.Add(traceId);
-
+                
                 trace.StopTime = DateTime.UtcNow.AddHours(1);
 
                 trace.Audit = true;
@@ -279,8 +279,12 @@ namespace PBITracer
 
                 var jsonObj = new JObject();
 
+                jsonObj.Add("EventClassName", e.EventClass.ToString());
+
+                jsonObj.Add("EventSubclassName", e.EventSubclass.ToString());
+                
                 foreach (var traceColumn in eventClassColumns)
-                {
+                {                  
                     jsonObj.Add(traceColumn.ToString(), e[traceColumn]);
                 }
 
@@ -310,6 +314,7 @@ namespace PBITracer
             AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.ActivityID);
             AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.RequestID);
             AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.DatabaseName);
+          
 
             if (eventClass != TraceEventClass.Error)
             {
