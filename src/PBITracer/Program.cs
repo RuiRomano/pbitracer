@@ -314,11 +314,16 @@ namespace PBITracer
             AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.ActivityID);
             AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.RequestID);
             AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.DatabaseName);
-          
 
-            if (eventClass != TraceEventClass.Error)
+
+            switch (eventClass)
             {
-                AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.IntegerData);
+                case TraceEventClass.ProgressReportCurrent:
+                case TraceEventClass.ProgressReportEnd:
+                    {
+                        AddColumnToTraceEvent(traceEvent, eventClass, TraceColumn.IntegerData);
+                    }
+                    break;
             }
 
             if (eventClass == TraceEventClass.QueryEnd)
