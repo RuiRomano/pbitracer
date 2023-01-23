@@ -40,6 +40,9 @@ namespace PBITracer
 
             [Option('e', "events", Required = false, Default = new string[] { "JobGraph", "ProgressReportEnd", "QueryEnd" }, HelpText = "Events to trace, ex: QueryEnd, ProgressReportEnd")]
             public IList<string> events { get; set; }
+
+            [Option('t', "timeout", Required = false, Default = 3600, HelpText = "Trace timeout")]
+            public int Timeout { get; set; }
         }
 
         private static Dictionary<TraceEventClass, List<TraceColumn>> listEventClassColumnCombination = new Dictionary<TraceEventClass, List<TraceColumn>>();
@@ -201,7 +204,9 @@ namespace PBITracer
 
                 trace = conn.Traces.Add(traceId);
                 
-                trace.StopTime = DateTime.UtcNow.AddHours(1);
+                trace.StopTime = DateTime.UtcNow.AddSeconds(o.Timeout);
+
+                logger.Information("Trace Stop Time at: '{0:yyyy-MM-dd HH:mm:ss}'", trace.StopTime);
 
                 trace.Audit = true;
 
