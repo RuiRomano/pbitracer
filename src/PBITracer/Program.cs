@@ -181,7 +181,7 @@ namespace PBITracer
                 conn = new Microsoft.AnalysisServices.Tabular.Server();
 
                 logger.Information("Connecting to server {0}", o.Server);
-
+      
                 conn.Connect(connStr);
 
                 var previousTraces = conn.Traces.Cast<Microsoft.AnalysisServices.Tabular.Trace>().Where(t => t.Name == traceId).ToList();
